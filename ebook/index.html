@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幼兒學習評量實作案例集｜翻頁電子書</title>
+<style>
+* { box-sizing: border-box; margin: 0; }
+body { background: #2e2a24; font-family: "Microsoft JhengHei", sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+header { color: #d8cfc2; text-align: center; padding: 14px 16px 6px; font-size: 15px; letter-spacing: .1em; }
+.stage { flex: 1; display: grid; place-items: center; padding: 10px 56px 6px; perspective: 2600px; }
+.book { position: relative; display: flex; box-shadow: 0 18px 60px #0009; border-radius: 6px; }
+.leaf { background: #fff; overflow: hidden; }
+.leaf img { display: block; height: 100%; width: auto; }
+.leaf.left { border-radius: 6px 0 0 6px; }
+.leaf.right { border-radius: 0 6px 6px 0; }
+.single .leaf { border-radius: 6px; }
+.flipper { position: absolute; top: 0; bottom: 0; width: 50%; left: 50%; transform-origin: left center; transform-style: preserve-3d; pointer-events: none; z-index: 5; }
+.flipper .face { position: absolute; inset: 0; backface-visibility: hidden; background: #fff; overflow: hidden; }
+.flipper .face img { display: block; height: 100%; width: auto; }
+.flipper .back { transform: rotateY(180deg); }
+.flipper.go { transition: transform .55s ease; }
+.arrow { position: fixed; top: 50%; transform: translateY(-50%); width: 44px; height: 84px; border: none; border-radius: 10px; background: #ffffff22; color: #fff; font-size: 26px; cursor: pointer; z-index: 20; }
+.arrow:hover { background: #ffffff44; }
+#prev { left: 8px; } #next { right: 8px; }
+footer { display: flex; align-items: center; gap: 14px; justify-content: center; padding: 8px 16px 16px; color: #b9ae9f; font-size: 13px; }
+input[type=range] { width: min(420px, 60vw); accent-color: #c98d64; }
+a.dl { color: #e0b48d; }
+@media (max-width: 700px) { .stage { padding: 8px 48px; } }
+</style>
+</head>
+<body>
+<header>幼兒學習評量實作案例集</header>
+<div class="stage"><div class="book" id="book"></div></div>
+<button class="arrow" id="prev" aria-label="上一頁">‹</button>
+<button class="arrow" id="next" aria-label="下一頁">›</button>
+<footer>
+<span id="ind"></span>
+<input type="range" id="slider" min="0" max="0" value="0">
+<a class="dl" href="../assets/downloads/幼兒學習評量實作案例集.pdf" download>下載 PDF</a>
+</footer>
+<script>
+var N = 53;
+var pad = function (i) { return (i < 10 ? "0" : "") + i; };
+var src = function (i) { return "pages/" + pad(i) + ".png"; };
+var book = document.getElementById("book");
+var slider = document.getElementById("slider");
+var ind = document.getElementById("ind");
+var cur = 0;          // 目前左頁（雙頁模式）或目前頁（單頁模式）
+var busy = false;
+
+function isSingle() { return window.innerWidth < 700 || window.innerWidth < window.innerHeight * 0.9; }
+
+function pageH() {
+  var h = Math.min(window.innerHeight - 130, (isSingle() ? (window.innerWidth - 60) : (window.innerWidth - 130) / 2) * 297 / 210);
+  return Math.max(h, 220);
+}
+
+function render() {
+  var h = pageH();
+  book.innerHTML = "";
+  book.classList.toggle("single", isSingle());
+  if (isSingle()) {
+    var d = document.createElement("div");
+    d.className = "leaf";
+    d.style.height = h + "px";
+    d.innerHTML = '<img src="' + src(cur) + '">';
+    book.appendChild(d);
+  } else {
+    // 書本式：封面單獨顯示於右側
+    var leftI = cur === 0 ? null : (cur % 2 === 1 ? cur : cur - 1);
+    var rightI = cur === 0 ? 0 : (leftI + 1 < N ? leftI + 1 : null);
+    var L = document.createElement("div");
+    L.className = "leaf left";
+    L.style.height = h + "px";
+    L.style.width = (h * 210 / 297) + "px";
+    if (leftI !== null) L.innerHTML = '<img src="' + src(leftI) + '">'; else L.style.background = "transparent";
+    var R = document.createElement("div");
+    R.className = "leaf right";
+    R.style.height = h + "px";
+    R.style.width = (h * 210 / 297) + "px";
+    if (rightI !== null) R.innerHTML = '<img src="' + src(rightI) + '">'; else R.style.background = "transparent";
+    book.appendChild(L); book.appendChild(R);
+  }
+  slider.max = N - 1;
+  slider.value = cur;
+  ind.textContent = (cur + 1) + " / " + N;
+}
+
+function step(dir) {
+  if (busy) return;
+  var nx;
+  if (isSingle()) {
+    nx = cur + dir;
+    if (nx < 0 || nx >= N) return;
+    cur = nx; render(); return;
+  }
+  nx = cur === 0 ? (dir > 0 ? 1 : 0) : cur + dir * 2;
+  if (dir > 0 && cur === 0) nx = 1;
+  if (dir < 0 && cur === 1) nx = 0;
+  if (nx < 0 || nx >= N) return;
+  animate(dir, nx);
+}
+
+function animate(dir, nx) {
+  var h = pageH(), w = h * 210 / 297;
+  var flipper = document.createElement("div");
+  flipper.className = "flipper";
+  var fFront = document.createElement("div"); fFront.className = "face front";
+  var fBack = document.createElement("div"); fBack.className = "face back";
+  if (dir > 0) {
+    var ri = cur === 0 ? 0 : cur + 1;
+    fFront.innerHTML = ri < N ? '<img style="height:' + h + 'px" src="' + src(ri) + '">' : "";
+    fBack.innerHTML = nx < N ? '<img style="height:' + h + 'px" src="' + src(nx) + '">' : "";
+    flipper.style.transform = "rotateY(0deg)";
+  } else {
+    fFront.innerHTML = cur > 0 ? '<img style="height:' + h + 'px" src="' + src(cur) + '">' : "";
+    var backI = nx === 0 ? 0 : nx + 1;
+    fBack.innerHTML = '<img style="height:' + h + 'px" src="' + src(backI < N ? backI : N - 1) + '">';
+    flipper.style.transform = "rotateY(-180deg)";
+  }
+  flipper.appendChild(fFront); flipper.appendChild(fBack);
+  book.appendChild(flipper);
+  busy = true;
+  requestAnimationFrame(function () {
+    flipper.classList.add("go");
+    flipper.style.transform = dir > 0 ? "rotateY(-180deg)" : "rotateY(0deg)";
+  });
+  setTimeout(function () { cur = nx; busy = false; render(); }, 580);
+}
+
+document.getElementById("next").onclick = function () { step(1); };
+document.getElementById("prev").onclick = function () { step(-1); };
+document.addEventListener("keydown", function (e) {
+  if (e.key === "ArrowRight" || e.key === "PageDown") step(1);
+  if (e.key === "ArrowLeft" || e.key === "PageUp") step(-1);
+});
+slider.oninput = function () {
+  cur = +slider.value;
+  if (!isSingle() && cur > 0 && cur % 2 === 0) cur -= 1;
+  render();
+};
+var sx = null;
+document.addEventListener("touchstart", function (e) { sx = e.touches[0].clientX; });
+document.addEventListener("touchend", function (e) {
+  if (sx === null) return;
+  var dx = e.changedTouches[0].clientX - sx;
+  if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+  sx = null;
+});
+window.addEventListener("resize", render);
+// 預載
+for (var i = 0; i < N; i++) { var im = new Image(); im.src = src(i); }
+render();
+</script>
+</body>
+</html>
